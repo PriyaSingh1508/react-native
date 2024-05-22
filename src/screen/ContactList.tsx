@@ -1,12 +1,11 @@
-import { Text,View,StyleSheet,FlatList,Image,TouchableOpacity, Alert,} from 'react-native';
-import { SwipeListView } from 'react-native-swipe-list-view';
-
+import { Text, View, StyleSheet, FlatList, Image, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import {StackNavigationProp} from '@react-navigation/stack';
-import {RootStackParamList} from '../../App';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../../App';
 import SQLite from 'react-native-sqlite-2';
-import {useEffect, useState,useRef} from 'react';
-import  Icon  from 'react-native-vector-icons/Entypo';
+import { useEffect, useState,useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Entypo';
 
 interface ContactListProps {
   navigation: StackNavigationProp<
@@ -24,14 +23,29 @@ interface Contact {
 }
 
 const db = SQLite.openDatabase('contactApp.db', '1.0', '', 1);
-export function ContactList({navigation}: ContactListProps): React.JSX.Element {
-  const ref=useRef();
-  let [flatListItems, setFlatListItems] = useState<Contact[]>([]);
+export function ContactList({ navigation }: ContactListProps): React.JSX.Element {
+
+  const [flatListItems, setFlatListItems] = useState<Contact[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [allContacts, setAllContacts] = useState<Contact[]>([]); 
+
+  const handleSearch = (text: string) => {
+    setSearchQuery(text);
+    if (text === '') {
+      setFlatListItems(sortContactsByName(allContacts));
+    } else {
+      const filteredContacts = allContacts.filter(contact =>
+        contact.name.toLowerCase().includes(text.toLowerCase())
+      );
+      setFlatListItems(sortContactsByName(filteredContacts));
+    }
+  };
 
   const sortContactsByName = (contacts: Contact[]) => {
     return contacts.sort((a, b) => a.name.localeCompare(b.name));
   };
-  let deleteContact = (id: number) => {
+
+  const deleteContact = (id: number) => {
     db.transaction((tx) => {
       tx.executeSql(
         'DELETE FROM table_contact where id=?',
@@ -45,7 +59,9 @@ export function ContactList({navigation}: ContactListProps): React.JSX.Element {
               [
                 {
                   text: 'Ok',
-                  onPress: () => navigation.navigate('ContactList'),
+                  onPress: () => {
+                    fetchContacts();
+                  },
                 },
               ],
               { cancelable: false }
@@ -58,91 +74,81 @@ export function ContactList({navigation}: ContactListProps): React.JSX.Element {
     });
   };
 
-  useEffect(() => {
-    // console.log(flatListItems);
-  }, [flatListItems]);
-
-  useEffect(() => {
+  const fetchContacts = () => {
     db.transaction(tx => {
-      tx.executeSql('SELECT * FROM table_contact ', [], (tx, results) => {
+      tx.executeSql('SELECT * FROM table_contact', [], (tx, results) => {
         var temp: Contact[] = [];
         for (let i = 0; i < results.rows.length; ++i)
           temp.push(results.rows.item(i));
-        setFlatListItems(sortContactsByName(temp));
-        // console.log(flatListItems);
+        setAllContacts(sortContactsByName(temp)); 
+        setFlatListItems(sortContactsByName(temp)); 
       });
     });
+  };
+
+  useEffect(() => {
+    fetchContacts();
   }, []);
 
-  const renderItem = ({item}: {item: Contact}) => (
+  useFocusEffect(
+    useCallback(() => {
+      fetchContacts();
+    }, [])
+  );
 
-    <Swipeable renderRightActions={()=>rightButtons(item.id)} rightThreshold={10} overshootLeft={false} overshootRight={false}>
-    <View style={styles.contactItem}>
-       
-      <TouchableOpacity
-        style={styles.contactItem}
-        onPress={() =>
-          navigation.navigate('UpdateContact', {contactId: item.id})
-        }>
-        <Image source={{uri: item.photo}} style={styles.contactImage} />
-        <Text style={styles.contactName}>{item.name}</Text>
-      </TouchableOpacity>
-    </View>
+  const renderItem = ({ item }: { item: Contact }) => (
+    <Swipeable renderRightActions={() => rightButtons(item.id)} rightThreshold={10} overshootLeft={false} overshootRight={false}>
+      <View style={styles.contactItem}>
+        <TouchableOpacity
+          style={styles.contactItem}
+          onPress={() =>
+            navigation.navigate('UpdateContact', { contactId: item.id })
+          }>
+          <Image source={{ uri: item.photo }} style={styles.contactImage} />
+          <Text style={styles.contactName}>{item.name}</Text>
+        </TouchableOpacity>
+      </View>
     </Swipeable>
-   
   );
 
-//   const rightButtons = (item:number)=>{
-//     console.log("Id of item",item);
-//     const itemId=item;
-//     return(
-//       <View style={styles.rightButton}>    
-//    <TouchableOpacity onPress={() => { console.log('Navigating to UpdateContact with ID:', itemId); navigation.navigate('UpdateContact', {contactId: item})}} > 
-//         <Text style={styles.button}>Update</Text>
-//     </TouchableOpacity>
-//     <TouchableOpacity onPress={() => deleteContact(item.id)}>
-//   <Text style={styles.button}>Delete</Text>
-// </TouchableOpacity>
+  const rightButtons = (item: number) => {
+    const handlePressUpdate = () => {
+      console.log('Navigating to UpdateContact with ID:', item);
+      navigation.navigate('UpdateContact', { contactId: item });
+    };
 
-//       </View>
-//     )
-//   }
-const rightButtons = (item:number) => {
-  const handlePressUpdate = () => {
-    console.log('Navigating to UpdateContact with ID:', item);
-    navigation.navigate('UpdateContact', { contactId: item});
-  };
+    const handlePressDelete = () => {
+      console.log('Deleting contact with ID:', item);
+      deleteContact(item);
+    };
 
-  const handlePressDelete = () => {
-    console.log('Deleting contact with ID:', item);
-    deleteContact(item);
+    return (
+      <View style={styles.rightButton}>
+        <TouchableOpacity onPress={handlePressDelete}>
+          <Text style={styles.button}>Delete</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handlePressUpdate}>
+          <Text style={styles.button}>Update</Text>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   return (
-    <View style={styles.rightButton}>
-      {/* <Icon
-    name="edit" size={19} color="black" onPress={()=>navigation.navigate('UpdateContact', { contactId: item})} style={{marginTop:18,marginRight:4}}/> */}
-      <TouchableOpacity onPress={handlePressDelete}>
-        <Text style={styles.button}>Delete</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={handlePressUpdate}>
-        <Text style={styles.button}>Update</Text>
-      </TouchableOpacity>
-     
-    </View>
-  );
-};
+    <View style={styles.container}>
+      <TextInput
+        style={styles.searchBar}
+        placeholder="Search Contacts"
+        onChangeText={handleSearch}
+        value={searchQuery}
+      />
 
-  return (
- 
-    <View style={styles.container}>  
       <FlatList
         data={flatListItems}
         renderItem={renderItem}
         keyExtractor={item => item.id.toString()}
       />
-     
-   
+
       <View style={styles.favContainer}>
         <TouchableOpacity
           style={styles.fab}
@@ -151,25 +157,25 @@ const rightButtons = (item:number) => {
         </TouchableOpacity>
       </View>
     </View>
-    
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width:370,
-   // borderLeftColor:'red',
-    //borderLeftWidth:2,
+    width: 370,
+  },
+  searchBar: {
+    height: 40,
+    borderWidth: 1,
+    paddingLeft: 10,
+    margin: 5,
+    borderColor: '#009688',
+    backgroundColor: 'white',
   },
   favContainer: {
-   // flex: 1,
-   
-    // position: 'relative',
-   // alignSelf: 'flex-end',
-    
-   marginLeft: 365,
-   marginBottom:5
+    marginLeft: 365,
+    marginBottom: 5
   },
   fab: {
     width: 36,
@@ -184,7 +190,7 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   contactImage: {
-    marginLeft:10,
+    marginLeft: 10,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -192,30 +198,28 @@ const styles = StyleSheet.create({
   contactItem: {
     flex: 1,
     flexDirection: 'row',
-   
   },
   contactName: {
     paddingTop: 10,
     paddingLeft: 12,
     fontSize: 16,
   },
-  button:{
-    flex:1,
-    marginTop:12,
-    marginRight:4,
-    width:50,
-    height:28,
-    backgroundColor:'purple',
-    color:'white',
-    borderCurve:'circular',
-    borderRadius:5
+  button: {
+    flex: 1,
+    marginTop: 12,
+    marginRight: 4,
+    width: 50,
+    height: 20,
+    backgroundColor: 'purple',
+    color: 'white',
+    borderCurve: 'circular',
+    borderRadius: 5
   },
-  rightButton:{
-    marginRight:0,
-    //width: 52, 
-    // height: '100%',
-    display:'flex',
-    flexDirection:'row',
-    justifyContent:'flex-end'
+  rightButton: {
+    marginRight: 0,
+    width: 112,
+    display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'flex-end'
   }
 });

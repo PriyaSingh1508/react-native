@@ -24,7 +24,7 @@ export const UpdateContact = ({route,navigation}: ContactListProps) => {
   const [photo, setPhoto] = useState<string | null>(null);
   let id:number;
   const [MyId, setId] = useState<number>(route.params.contactId);
-  //const [id, setId] = useState(0); 
+ 
   
  
 useEffect(() => {
@@ -39,7 +39,7 @@ useEffect(() => {
     setLandlineNo(landlineNo);
     setPhoto(photo);
     setFavorite(favorite);
-    //console.log("Inside updatestate",name, mobNo, landlineNo, photo,favorite  );
+    
   };
  
   let searchContact = (id:number) => {
